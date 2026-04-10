@@ -28,12 +28,10 @@ export default defineNuxtConfig({
       apiBase: process.env.NUXT_PUBLIC_API_BASE || 'http://localhost:8000',
     },
   },
-  // Generate static site for GitHub Pages
+  // SPA mode for GitHub Pages (no SSR, no payload extraction)
+  ssr: false,
+  // Nuxt will output a pure SPA build (no _payload.json, no external data fetching)
   nitro: {
     preset: 'static',
-  },
-  // SPA fallback for GitHub Pages (all routes serve index.html)
-  routeRules: {
-    '/**': { ssr: false },
   },
 })
