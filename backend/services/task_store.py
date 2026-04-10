@@ -18,8 +18,9 @@ from schemas.models import (
 )
 from mocks.data import MOCK_ACCOUNT_REPORT, MOCK_POST_REPORT
 
-# Lazy import to avoid importing playwright at module level when not needed
+# Lazy imports for real services
 _scraper = None
+_analysis_service = None
 
 def _get_scraper():
     global _scraper
@@ -27,6 +28,13 @@ def _get_scraper():
         from services.scraper_protocol import get_scraper
         _scraper = get_scraper()
     return _scraper
+
+def _get_analysis_service():
+    global _analysis_service
+    if _analysis_service is None:
+        from services.analysis_service import get_analysis_service
+        _analysis_service = get_analysis_service()
+    return _analysis_service
 
 
 # ── In-memory storage ────────────────────────────────────────────────
@@ -125,9 +133,16 @@ def _run_pipeline(task_id: str, report_id: str, input_type: InputType, url: str)
         task["progress"] = 45
         time.sleep(1.8)
 
-        # In real mode: call AI analysis service here
-        # In mock mode: use pre-defined AI analysis from mocks/data.py
-        analysis_payload = _get_analysis_payload(input_type)
+        # Call real AI analysis service (falls back to mock if no API key)
+        # Runs in thread context via asyncio.run()
+        async def _do_analysis():
+            svc = _get_analysis_service()
+            if input_type == InputType.ACCOUNT:
+                return await svc.analyze_account(raw)
+            else:
+                return await svc.analyze_post(raw)
+        analysis_result = asyncio.run(_do_analysis())
+        analysis_payload = {"analysis": analysis_result}
 
         task["progress"] = 65
         time.sleep(1.2)
@@ -178,7 +193,11 @@ def _extract_note_id(url: str, input_type: InputType) -> str:
 
 
 def _get_analysis_payload(input_type: InputType) -> dict:
-    """Return the AI analysis section for the given type."""
+    """Return the AI analysis section for the given type.
+    
+    NOTE: This is only used as fallback when no real AI API is configured.
+    The real analysis path goes through _get_analysis_service() in _run_pipeline.
+    """
     if input_type == InputType.ACCOUNT:
         return {"analysis": MOCK_ACCOUNT_REPORT["analysis"]}
     return {"analysis": MOCK_POST_REPORT["analysis"]}

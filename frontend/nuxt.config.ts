@@ -2,6 +2,8 @@ export default defineNuxtConfig({
   devtools: { enabled: false },
   compatibilityDate: '2024-11-01',
   app: {
+    baseURL: '/red-checking/',
+    buildAssetsDir: '/_nuxt/',
     head: {
       title: 'Red Checking - 小红书账号/内容 AI 检测',
       meta: [
@@ -21,7 +23,17 @@ export default defineNuxtConfig({
   css: ['~/assets/css/main.css'],
   runtimeConfig: {
     public: {
+      // Backend API — override via NUXT_PUBLIC_API_BASE env var
+      // For production: set to your deployed backend URL
       apiBase: process.env.NUXT_PUBLIC_API_BASE || 'http://localhost:8000',
     },
+  },
+  // Generate static site for GitHub Pages
+  nitro: {
+    preset: 'static',
+  },
+  // SPA fallback for GitHub Pages (all routes serve index.html)
+  routeRules: {
+    '/**': { ssr: false },
   },
 })
