@@ -8,5 +8,4 @@ __pycache__/
 frontend/.nuxt/
 frontend/dist/
 frontend/.output/
-frontend/node_modules/
 *.egg-info/
