@@ -24,7 +24,7 @@
               placeholder="粘贴小红书账号或帖子链接..."
               :disabled="loading"
               @input="validationError = ''"
-              @keydown.enter="url.value.trim() && startAnalysis()"
+              @keydown.enter="url.trim() && startAnalysis()"
             />
             <button
               v-if="url"
@@ -45,7 +45,7 @@
 
           <button
             class="btn btn-primary w-full mt-12"
-            :disabled="!url.value.trim() || loading"
+            :disabled="!url.trim() || loading"
             @click="startAnalysis"
           >
             <span v-if="loading" class="spinner" />
@@ -203,7 +203,7 @@ const detectedType = computed(() => {
 })
 
 const showHints = computed(() => {
-  return !url.trim() || detectedType.value === ''
+  return !url.value.trim() || detectedType.value === ''
 })
 
 // ── Validation ───────────────────────────────────────────────────
