@@ -1,0 +1,9 @@
+node_modules/
+.venv/
+.venv13/
+__pycache__/
+*.pyc
+.DS_Store
+*.log
+frontend/.nuxt/
+frontend/dist/
