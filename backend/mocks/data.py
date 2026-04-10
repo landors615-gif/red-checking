@@ -207,3 +207,99 @@ MOCK_POST_REPORT = {
         ],
     },
 }
+
+
+# ── Edge case: small/new account ─────────────────────────────────────────────
+
+MOCK_SMALL_ACCOUNT_REPORT = {
+    "reportId": "rpt_demo_small_001",
+    "taskId": "task_demo_small_001",
+    "type": "account",
+    "generatedAt": "2026-04-10T15:10:00+08:00",
+    "nickname": "护肤新手日记",
+    "bio": "从零开始的护肤记录｜分享真实使用感受\n偶尔踩坑偶尔种草",
+    "stats": {
+        "followers": "386",
+        "following": 201,
+        "likes_received": "1200",
+        "posts_count": 18,
+        "avg_likes": 67,
+        "avg_collects": 12,
+        "avg_comments": 3,
+    },
+    "top_posts": [
+        {
+            "title": "第一次刷酸｜新手必看记录",
+            "cover": "https://placehold.co/600x400/lightblue/white?text=刷酸记录",
+            "likes": 320,
+            "collects": 98,
+            "comments": 24,
+        },
+        {
+            "title": "平价水乳分享｜学生党友好",
+            "cover": "https://placehold.co/600x400/lightgreen/white?text=平价水乳",
+            "likes": 180,
+            "collects": 62,
+            "comments": 11,
+        },
+    ],
+    "analysis": {
+        "account_summary": "该账号处于起步阶段，主要记录个人护肤学习过程，内容真实感强但缺乏系统性。粉丝基数小，互动数据偏低，但评论区用户多为同类新手，具有较强的共情基础。账号有一定成长空间，需要找准差异化定位。",
+        "positioning": "护肤新手成长记录博主 — 真实、接地气、陪伴感",
+        "target_audience": "护肤新手（18-24岁），对学生党平价产品有需求，愿意看真实记录而非专业测评",
+        "content_topics": [
+            "新手护肤入门记录",
+            "平价产品使用反馈",
+            "护肤踩坑经验分享",
+            "产品开箱与平替推荐",
+        ],
+        "viral_posts": [
+            {
+                "title": "第一次刷酸｜新手必看记录",
+                "reason": "高风险护肤行为的新手指南，标题锁定目标人群，收藏率高",
+            },
+        ],
+        "title_patterns": [
+            "新手/入门型：'第一次XX｜新手必看'",
+            "价格锚定型：'平价分享｜学生党友好'",
+            "记录型：'XX天记录｜真实反馈'",
+        ],
+        "content_patterns": [
+            "以个人经历为线索，情感真实",
+            "缺少专业数据支撑，但用户共情强",
+            "封面以自拍为主，缺少统一视觉风格",
+            "内容篇幅较短，信息密度有限",
+        ],
+        "comment_insights": {
+            "high_freq_questions": [
+                "用了什么产品？",
+                "有爆痘吗？",
+                "多少钱？",
+                "适合干皮吗？",
+            ],
+            "user_sentiment": "正面偏好奇，用户愿意互动但基数小",
+            "key_demands": "产品具体名称、价格、适合肤质",
+        },
+        "strengths": [
+            "真实感强，不做作",
+            "目标人群明确（新手党）",
+            "评论区互动意愿较高",
+        ],
+        "weaknesses": [
+            "内容同质化严重，新手赛道拥挤",
+            "缺少专业性，难以建立信任壁垒",
+            "粉丝基数太低，变现困难",
+            "视觉风格不统一，辨识度低",
+        ],
+        "benchmarking": {
+            "similar_accounts": ["新手护肤博主A（2000粉）", "护肤日记B（5000粉）"],
+            "data_reference": "同类新账号平均互动率约1.5%，该账号约1.8%，有一定潜力",
+        },
+        "action_suggestions": [
+            "建议选择一个垂直细分方向（如刷酸/敏感肌）做深度内容",
+            "可参考'新手踩坑→解决方案'的结构化内容框架",
+            "统一封面风格，提升账号视觉辨识度",
+            "评论区高频问题可作为固定FAQ降低重复回复成本",
+        ],
+    },
+}

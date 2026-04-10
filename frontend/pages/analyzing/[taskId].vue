@@ -60,8 +60,10 @@
 
           <!-- Error -->
           <div v-if="task.status === 'failed'" class="error-box card animate-slideUp">
-            <p class="text-accent">{{ task.errorMessage || '分析过程中出现错误' }}</p>
-            <button class="btn btn-ghost mt-16 w-full" @click="retry">重试</button>
+            <div class="error-icon">!</div>
+            <p class="error-title">生成失败</p>
+            <p class="text-accent text-sm">{{ task.errorMessage || '分析过程中出现错误，请重试' }}</p>
+            <button class="btn btn-primary mt-20 w-full" @click="retry">重新分析</button>
             <NuxtLink to="/" class="btn btn-ghost mt-8 w-full">返回首页</NuxtLink>
           </div>
 
@@ -273,6 +275,21 @@ onUnmounted(() => {
 }
 .error-box {
   border-color: rgba(232, 64, 64, 0.3);
+  text-align: center;
+  padding: 32px 20px;
+}
+.error-icon {
+  width: 48px; height: 48px;
+  border-radius: 50%;
+  background: var(--accent-dim);
+  color: var(--accent);
+  font-size: 1.5rem; font-weight: 800;
+  display: flex; align-items: center; justify-content: center;
+  margin: 0 auto 16px;
+}
+.error-title {
+  font-size: 1.125rem; font-weight: 700;
+  color: var(--text-primary); margin-bottom: 8px;
 }
 .loading-state {
   text-align: center;

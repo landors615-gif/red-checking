@@ -1,23 +1,17 @@
 // composables/useApi.ts
+import type {
+  CreateTaskResponse,
+  TaskStatusResponse,
+  ReportResponse,
+} from '~/types/report'
 
-export interface CreateTaskResponse {
-  taskId: string
-  type: 'account' | 'post'
-  status: string
-}
-
-export interface TaskStatus {
-  taskId: string
-  type: 'account' | 'post'
-  status: 'pending' | 'scraping' | 'analyzing' | 'generating' | 'done' | 'failed'
-  reportId?: string
-  errorMessage?: string
-  progress: number
-}
+export { type CreateTaskResponse, type TaskStatusResponse, type ReportResponse }
 
 export const useApi = () => {
-  // Use a fixed base URL for MVP; can be overridden via env
-  const baseUrl = 'http://localhost:8000'
+  // Use Nuxt 3 runtime config (NUXT_PUBLIC_API_BASE from nuxt.config.ts)
+  // Falls back to localhost:8000 for local dev
+  const config = useRuntimeConfig()
+  const baseUrl = (config.public.apiBase as string | undefined) || 'http://localhost:8000'
 
   const createTask = async (url: string): Promise<CreateTaskResponse> => {
     const res = await $fetch<CreateTaskResponse>(`${baseUrl}/api/analysis`, {
@@ -27,13 +21,13 @@ export const useApi = () => {
     return res
   }
 
-  const getTaskStatus = async (taskId: string): Promise<TaskStatus> => {
-    const res = await $fetch<TaskStatus>(`${baseUrl}/api/analysis/${taskId}`)
+  const getTaskStatus = async (taskId: string): Promise<TaskStatusResponse> => {
+    const res = await $fetch<TaskStatusResponse>(`${baseUrl}/api/analysis/${taskId}`)
     return res
   }
 
-  const getReport = async (reportId: string) => {
-    const res = await $fetch(`${baseUrl}/api/report/${reportId}`)
+  const getReport = async (reportId: string): Promise<ReportResponse> => {
+    const res = await $fetch<ReportResponse>(`${baseUrl}/api/report/${reportId}`)
     return res
   }
 
