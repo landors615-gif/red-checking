@@ -23,6 +23,8 @@ from typing import Optional
 # ── Analysis modes ────────────────────────────────────────────────
 
 def get_analysis_mode() -> str:
+    if os.environ.get('MINIMAX_API_KEY'):
+        return 'minimax'
     if os.environ.get('ANTHROPIC_API_KEY'):
         return 'anthropic'
     if os.environ.get('OPENAI_API_KEY'):
@@ -123,6 +125,16 @@ class AnalysisService:
         if self.mode == 'anthropic':
             import anthropic
             self._client = anthropic.Anthropic(api_key=os.environ['ANTHROPIC_API_KEY'])
+        elif self.mode == 'minimax':
+            import httpx
+            self._client = httpx.Client(
+                base_url='https://api.minimax.chat/v1',
+                headers={
+                    'Authorization': f"Bearer {os.environ['MINIMAX_API_KEY']}",
+                    'Content-Type': 'application/json',
+                },
+                timeout=60,
+            )
         elif self.mode in ('openai', 'openrouter'):
             import httpx
             self._client = httpx.Client(
@@ -186,6 +198,16 @@ class AnalysisService:
                 messages=[{'role': 'user', 'content': prompt}],
             )
             return resp.content[0].text
+
+        elif self.mode == 'minimax':
+            client = self._get_client()
+            resp = client.post('/text/chatcompletion_v2', json={
+                'model': 'MiniMax-Text-01',
+                'messages': [{'role': 'user', 'content': prompt}],
+                'max_tokens': 2048,
+            })
+            data = resp.json()
+            return data['choices'][0]['message']['content']
 
         elif self.mode == 'openai':
             client = self._get_client()
