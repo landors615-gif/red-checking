@@ -98,13 +98,98 @@ class RealScraper(BaseScraper):
         """Attempt to scrape XHS post data via real HTTP."""
         import httpx
 
+        # Strategy 1: SSR page scraping (works when xsec_token is in URL)
+        post_data = await self._try_ssr_scrape_post(note_id, url)
+        if post_data:
+            print(f"[RealScraper] Got real post data via SSR for {note_id}")
+            return post_data
+
+        # Strategy 2: API endpoints (usually blocked without full auth)
         post_data = await self._try_fetch_post(note_id)
         if post_data:
-            print(f"[RealScraper] Got real post data for {note_id}")
+            print(f"[RealScraper] Got real post data via API for {note_id}")
             return post_data
 
         print(f"[RealScraper] Falling back to enhanced mock for post {note_id}")
         return await self._enhanced_mock_post(note_id, url)
+
+    async def _try_ssr_scrape_post(self, note_id: str, url: str) -> Optional[ScrapedPost]:
+        """Scrape post data from SSR __INITIAL_STATE__ in the HTML page.
+        
+        XHS returns server-rendered data when xsec_token is present in the URL.
+        """
+        import httpx
+
+        try:
+            async with httpx.AsyncClient(timeout=15, follow_redirects=True, cookies=self.cookies) as client:
+                resp = await client.get(url, headers=self.headers)
+                if resp.status_code != 200:
+                    print(f"[RealScraper] SSR page returned {resp.status_code}")
+                    return None
+
+                html = resp.text
+                m = re.search(r'window\.__INITIAL_STATE__\s*=\s*(\{.*?\})\s*</script>', html, re.DOTALL)
+                if not m:
+                    print(f"[RealScraper] No __INITIAL_STATE__ found in HTML")
+                    return None
+
+                raw = m.group(1).replace('undefined', 'null')
+                data = json.loads(raw)
+                note_map = data.get('note', {}).get('noteDetailMap', {})
+
+                for k, v in note_map.items():
+                    nc = v.get('note', {})
+                    if not nc:
+                        continue
+                    interact = nc.get('interactInfo', {})
+                    tag_list = [t.get('name', '') for t in nc.get('tagList', []) if t.get('name')]
+                    user = nc.get('user', {})
+
+                    # Parse timestamp
+                    time_val = nc.get('time', '')
+                    published = ''
+                    if isinstance(time_val, (int, float)) and time_val > 1000000000:
+                        from datetime import datetime
+                        ts = time_val / 1000 if time_val > 1e12 else time_val
+                        published = datetime.fromtimestamp(ts).strftime('%Y-%m-%d')
+                    elif isinstance(time_val, str):
+                        published = time_val
+
+                    return {
+                        "post_title": nc.get('title', '') or nc.get('desc', '')[:50],
+                        "published_at": published,
+                        "post_tags": tag_list,
+                        "nickname": user.get('nickname', ''),
+                        "stats": {
+                            "likes": self._parse_count(interact.get('likedCount', 0)),
+                            "collects": self._parse_count(interact.get('collectedCount', 0)),
+                            "comments": self._parse_count(interact.get('commentCount', 0)),
+                            "shares": self._parse_count(interact.get('shareCount', 0)),
+                            "cover": (nc.get('imageList', [{}])[0].get('urlDefault', '') if nc.get('imageList') else ''),
+                        },
+                        "content": nc.get('desc', ''),
+                    }
+
+                print(f"[RealScraper] noteDetailMap empty")
+                return None
+        except Exception as e:
+            print(f"[RealScraper] SSR scrape failed: {e}")
+            return None
+
+    @staticmethod
+    def _parse_count(val) -> int:
+        """Parse count values like '251' or '1.2万' into int."""
+        if isinstance(val, int):
+            return val
+        if isinstance(val, str):
+            val = val.strip()
+            if '万' in val:
+                return int(float(val.replace('万', '')) * 10000)
+            try:
+                return int(val)
+            except ValueError:
+                return 0
+        return 0
 
     async def _try_fetch_account(self, user_id: str) -> Optional[ScrapedAccount]:
         """Try XHS account API endpoints. Returns None if blocked."""
