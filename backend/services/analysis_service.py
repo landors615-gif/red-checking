@@ -133,7 +133,7 @@ class AnalysisService:
                     'Authorization': f"Bearer {os.environ['MINIMAX_API_KEY']}",
                     'Content-Type': 'application/json',
                 },
-                timeout=60,
+                timeout=120,
             )
         elif self.mode in ('openai', 'openrouter'):
             import httpx
@@ -202,12 +202,18 @@ class AnalysisService:
         elif self.mode == 'minimax':
             client = self._get_client()
             resp = client.post('/text/chatcompletion_v2', json={
-                'model': 'MiniMax-Text-01',
+                'model': 'MiniMax-M2.7',
                 'messages': [{'role': 'user', 'content': prompt}],
-                'max_tokens': 2048,
+                'max_tokens': 8192,
             })
             data = resp.json()
-            return data['choices'][0]['message']['content']
+            base_resp = data.get('base_resp', {})
+            if base_resp.get('status_code', 0) != 0:
+                raise ValueError(f"MiniMax API error: {base_resp.get('status_msg')}")
+            msg = data['choices'][0]['message']
+            # MiniMax M2.7 may put content in reasoning_content instead of content
+            text = msg.get('content') or msg.get('reasoning_content') or ''
+            return text
 
         elif self.mode == 'openai':
             client = self._get_client()
