@@ -12,11 +12,15 @@ app = FastAPI(
     description="小红书账号/内容 AI 检测分析 API",
 )
 
-# CORS for frontend dev
+# CORS — credentials=True requires explicit origins (not "*")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
+    allow_origins=[
+        "https://landors615-gif.github.io",
+        "http://localhost:3000",
+        "http://localhost:8000",
+    ],
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
