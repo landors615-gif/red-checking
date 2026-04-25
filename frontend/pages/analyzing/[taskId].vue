@@ -115,6 +115,10 @@ const ERROR_CODE_MESSAGES: Record<string, string> = {
   XHS_RATE_LIMITED: '请求过于频繁，请稍后重试',
   XHS_PARSE_FAILED: '页面结构解析失败，可能内容已删除或需登录',
   XHS_NETWORK_ERROR: '网络连接异常，请检查网络后重试',
+  AI_EMPTY_RESPONSE: 'AI 分析结果为空，请稍后重试',
+  AI_OUTPUT_PARSE_FAILED: 'AI 返回格式异常，请稍后重试',
+  MINIMAX_HTTP_ERROR: 'AI 服务请求失败，请稍后重试',
+  MINIMAX_EMPTY_RESPONSE: 'AI 服务返回为空，请稍后重试',
 }
 
 const steps = ['抓取内容', '生成分析', '组织报告']

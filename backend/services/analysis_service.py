@@ -18,8 +18,89 @@ Real analysis status:
 """
 import os
 import json
+import re
 import asyncio
 from typing import Optional
+
+
+# ── AI Analysis Errors ────────────────────────────────────────────────
+
+class AIAnalysisError(Exception):
+    """Classified AI analysis error with machine-readable code."""
+
+    CODE_EMPTY_RESPONSE = "AI_EMPTY_RESPONSE"
+    CODE_OUTPUT_PARSE_FAILED = "AI_OUTPUT_PARSE_FAILED"
+    CODE_MINIMAX_HTTP_ERROR = "MINIMAX_HTTP_ERROR"
+    CODE_MINIMAX_EMPTY_RESPONSE = "MINIMAX_EMPTY_RESPONSE"
+
+    def __init__(self, code: str, message: str, debug: Optional[dict] = None):
+        super().__init__(message)
+        self.code = code
+        self.message = message
+        self.debug = debug or {}
+
+    def log_prefix(self) -> str:
+        return f"[{self.code}] {self.message}"
+
+
+def parse_ai_json(text: str) -> dict:
+    """
+    Parse AI output into a JSON dict.
+
+    Handles:
+    - Direct JSON string
+    - Markdown fenced code block: ```json ... ```
+    - First {...} block found in text
+
+    Raises AIAnalysisError with CODE_EMPTY_RESPONSE or CODE_OUTPUT_PARSE_FAILED.
+    """
+    if not text or not text.strip():
+        raw_preview = repr(text[:500]) if text else "(empty)"
+        raise AIAnalysisError(
+            AIAnalysisError.CODE_EMPTY_RESPONSE,
+            "AI returned empty response",
+            {"raw_first_500": raw_preview},
+        )
+
+    text = text.strip()
+
+    # 1. Try direct parse
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        pass
+
+    # 2. Try fenced code block
+    fence_pattern = re.compile(r"```json\s*\n?(.*?)\n?```", re.DOTALL | re.IGNORECASE)
+    match = fence_pattern.search(text)
+    if match:
+        try:
+            return json.loads(match.group(1).strip())
+        except json.JSONDecodeError:
+            pass
+
+    # 3. Try first {...} block by brace matching
+    start = text.find('{')
+    if start != -1:
+        depth = 0
+        for i, ch in enumerate(text[start:], start):
+            if ch == '{':
+                depth += 1
+            elif ch == '}':
+                depth -= 1
+                if depth == 0:
+                    try:
+                        return json.loads(text[start:i+1])
+                    except json.JSONDecodeError:
+                        break
+
+    # All attempts failed
+    raw_preview = text[:500]
+    raise AIAnalysisError(
+        AIAnalysisError.CODE_OUTPUT_PARSE_FAILED,
+        "AI output could not be parsed as JSON",
+        {"raw_first_500": raw_preview},
+    )
 
 # ── Analysis modes ────────────────────────────────────────────────
 
@@ -131,7 +212,7 @@ class AnalysisService:
         data_str = json.dumps(account_data, ensure_ascii=False, indent=2)
         prompt = ACCOUNT_ANALYSIS_PROMPT.format(note_data=data_str)
         analysis = await self._call_ai(prompt)
-        return json.loads(analysis)
+        return parse_ai_json(analysis)
 
     async def analyze_post(self, post_data: dict) -> dict:
         """Generate AI analysis for a post. Failures propagate up."""
@@ -143,7 +224,7 @@ class AnalysisService:
         data_str = json.dumps(post_data, ensure_ascii=False, indent=2)
         prompt = POST_ANALYSIS_PROMPT.format(note_data=data_str)
         analysis = await self._call_ai(prompt)
-        return json.loads(analysis)
+        return parse_ai_json(analysis)
 
     async def _call_ai(self, prompt: str) -> str:
         """Dispatch to the configured AI provider."""

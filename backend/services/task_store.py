@@ -180,9 +180,24 @@ def _run_pipeline(task_id: str, report_id: str, input_type: InputType, url: str)
         task["progress"] = 0
         # Handle classified scraper errors
         from services.scraper_errors import XHSScraperError
+        from services.analysis_service import AIAnalysisError
         if isinstance(exc, XHSScraperError):
             task["errorMessage"] = f"[{exc.code}] {exc.message}"
             task["errorCode"] = exc.code
+            task["errorDebug"] = exc.debug
+            print(f"[CRITICAL] {exc.log_prefix()}")
+            if exc.debug:
+                print(f"[DEBUG] {exc.debug}")
+        elif isinstance(exc, AIAnalysisError):
+            task["errorCode"] = exc.code
+            # Map error codes to user-friendly Chinese messages
+            friendly_messages = {
+                AIAnalysisError.CODE_EMPTY_RESPONSE: "AI 分析结果为空，请稍后重试",
+                AIAnalysisError.CODE_OUTPUT_PARSE_FAILED: "AI 返回格式异常，请稍后重试",
+                AIAnalysisError.CODE_MINIMAX_HTTP_ERROR: "AI 服务请求失败，请稍后重试",
+                AIAnalysisError.CODE_MINIMAX_EMPTY_RESPONSE: "AI 服务返回为空，请稍后重试",
+            }
+            task["errorMessage"] = friendly_messages.get(exc.code, str(exc))
             task["errorDebug"] = exc.debug
             print(f"[CRITICAL] {exc.log_prefix()}")
             if exc.debug:
