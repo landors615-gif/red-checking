@@ -188,17 +188,17 @@ const validationError = ref('')
 function extractXHSUrl(input: string): string | null {
   const text = input.trim()
   if (!text) return null
-  // Match xhslink.com/... or xiaohongshu.com/... URLs (with possible surrounding text)
-  const match = text.match(/(https?:\/\/[^\s\]'"）】">]*?(?:xhslink\.com|xiaohongshu\.com)[^\s\]'"）】">]*)/i)
+  // Branch A: URL with protocol anywhere in text (including 分享文案 with spaces)
+  const mA = text.match(/(?:https?:\/\/)?[^\s]*(?:xhslink\.com|xiaohongshu\.com)\/[^\s\u4e00-\u9fff]*/i)
+  // Branch B: bare domain at any position (no http:// prefix)
+  const mB = text.match(/(?:xhslink\.com|xiaohongshu\.com)\/[^\s\u4e00-\u9fff]*/i)
+  const match = mA || mB
   if (match) {
-    // Trim trailing punctuation/characters that aren't part of URL
-    let extracted = match[1]
-    // Remove trailing Chinese punctuation or quotes
-    extracted = extracted.replace(/[）】]\s*$/, '')
-    // Ensure it starts with http(s)
-    if (!extracted.startsWith('http')) {
-      extracted = 'https://' + extracted
-    }
+    let extracted = match[0].trim()
+    // Strip trailing CJK characters (【】etc) and whitespace that may slip through
+    extracted = extracted.replace(/[\u3000-\u303f\uff00-\uffef\u4e00-\u9fff\s]*$/, '')
+    if (!extracted) return null
+    if (!extracted.startsWith('http')) extracted = 'https://' + extracted
     return extracted
   }
   return null
