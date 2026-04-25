@@ -20,6 +20,7 @@ Activation: SCRAPER_MODE=real python main.py
 Set XHS_COOKIES env var for authenticated requests (format: key=value; key2=value2)
 """
 from services.scraper_protocol import BaseScraper, ScrapedAccount, ScrapedPost
+from services.scraper_errors import XHSScraperError
 from typing import Optional
 import asyncio
 import os
@@ -130,11 +131,57 @@ class RealScraper(BaseScraper):
                 html = resp.text
                 m = re.search(r'window\.__INITIAL_STATE__\s*=\s*(\{.*?\})\s*</script>', html, re.DOTALL)
                 if not m:
-                    print(f"[RealScraper] No __INITIAL_STATE__ found in HTML")
-                    return None
+                    # Classify WHY __INITIAL_STATE__ is missing
+                    if resp.status_code in (401, 403):
+                        raise XHSScraperError(
+                            XHSScraperError.CODE_COOKIE_EXPIRED,
+                            "Cookie 已失效或被风控，HTTP " + str(resp.status_code),
+                            debug={"http_status": resp.status_code, "body_length": len(resp.text)},
+                        )
+                    if "请登录" in resp.text or "/login" in resp.url.path or "登录后查看" in resp.text:
+                        raise XHSScraperError(
+                            XHSScraperError.CODE_COOKIE_EXPIRED,
+                            "需要登录后才能查看此内容",
+                            debug={"http_status": resp.status_code, "has_login_text": True},
+                        )
+                    # Blocked / CAPTCHA / empty response
+                    if resp.status_code == 403 or resp.status_code == 429:
+                        raise XHSScraperError(
+                            XHSScraperError.CODE_RATE_LIMITED,
+                            f"小红书风控拦截，HTTP {resp.status_code}",
+                            debug={"http_status": resp.status_code},
+                        )
+                    raise XHSScraperError(
+                        XHSScraperError.CODE_PARSE_FAILED,
+                        "页面中未找到 __INITIAL_STATE__，可能被风控或页面结构变化",
+                        debug={
+                            "http_status": resp.status_code,
+                            "body_length": len(resp.text),
+                            "body_first_200": resp.text[:200],
+                            "has_captcha": "captcha" in resp.text.lower(),
+                        },
+                    )
 
                 raw = m.group(1).replace('undefined', 'null')
-                data = json.loads(raw)
+                if not raw.strip():
+                    raise XHSScraperError(
+                        XHSScraperError.CODE_PARSE_FAILED,
+                        "__INITIAL_STATE__ 为空",
+                        debug={"http_status": resp.status_code, "body_length": len(resp.text)},
+                    )
+                try:
+                    data = json.loads(raw)
+                except json.JSONDecodeError as je:
+                    raise XHSScraperError(
+                        XHSScraperError.CODE_PARSE_FAILED,
+                        f"JSON 解析失败: {je}",
+                        debug={
+                            "http_status": resp.status_code,
+                            "raw_length": len(raw),
+                            "raw_first_200": raw[:200],
+                            "raw_last_200": raw[-200:],
+                        },
+                    )
                 note_map = data.get('note', {}).get('noteDetailMap', {})
 
                 for k, v in note_map.items():
@@ -170,11 +217,30 @@ class RealScraper(BaseScraper):
                         "content": nc.get('desc', ''),
                     }
 
+                # Check if this is a video-only post (no text content in noteDetailMap)
+                if not note_map:
+                    # Could be video post or blocked content — check the raw note type
+                    note_type = data.get('note', {}).get('note', {})
+                    # Peek at first note in map to determine type
+                    for k, v in {"_": data.get('note', {}).get('noteDetailMap', {})} if False else [None]:
+                        pass
+                    # Fallback: if we got HTML but no parsable note, it's likely blocked
+                    raise XHSScraperError(
+                        XHSScraperError.CODE_CONTENT_BLOCKED,
+                        "无法解析笔记内容，可能为视频帖或已被删除",
+                        debug={"http_status": resp.status_code, "note_map_keys": list(note_map.keys())},
+                    )
                 print(f"[RealScraper] noteDetailMap empty")
                 return None
+        except XHSScraperError:
+            raise  # re-raise classified errors
         except Exception as e:
-            print(f"[RealScraper] SSR scrape failed: {e}")
-            return None
+            print(f"[RealScraper] SSR scrape unexpected error: {e}")
+            raise XHSScraperError(
+                XHSScraperError.CODE_NETWORK_ERROR,
+                f"网络请求异常: {str(e)}",
+                debug={"exception": type(e).__name__, "message": str(e)},
+            )
 
     @staticmethod
     def _parse_count(val) -> int:

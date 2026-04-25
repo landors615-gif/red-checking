@@ -177,7 +177,18 @@ def _run_pipeline(task_id: str, report_id: str, input_type: InputType, url: str)
     except Exception as exc:
         task["status"] = TaskStatus.FAILED
         task["progress"] = 0
-        task["errorMessage"] = str(exc)
+        # Handle classified scraper errors
+        from services.scraper_errors import XHSScraperError
+        if isinstance(exc, XHSScraperError):
+            task["errorMessage"] = f"[{exc.code}] {exc.message}"
+            task["errorCode"] = exc.code
+            task["errorDebug"] = exc.debug
+            print(f"[CRITICAL] {exc.log_prefix()}")
+            if exc.debug:
+                print(f"[DEBUG] {exc.debug}")
+        else:
+            task["errorMessage"] = str(exc)
+            print(f"[ERROR] Pipeline exception: {exc}")
         # Clean up failed report slot
         if _reports.get(report_id) is None:
             del _reports[report_id]
