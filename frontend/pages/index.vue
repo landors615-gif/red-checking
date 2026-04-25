@@ -20,10 +20,12 @@
             <input
               v-model="url"
               class="input"
-              type="url"
-              placeholder="粘贴小红书账号或帖子链接..."
+              type="text"
+              inputmode="url"
+              placeholder="粘贴小红书账号/帖子链接，或整段分享文案..."
               :disabled="loading"
               @input="validationError = ''"
+              @paste="handlePaste"
               @keydown.enter="url.trim() && startAnalysis()"
             />
             <button
@@ -213,6 +215,9 @@ const XHS_POST_PATTERNS = [
   /xiaohongshu\.com\/explore\//i,
   /xiaohongshu\.com\/discovery\/item\//i,
 ]
+const XHS_SHORT_LINK_PATTERNS = [
+  /xhslink\.com\/[a-z0-9]+\/[a-z0-9_-]+/i,
+]
 
 // detectedType operates on the extracted URL (not raw input)
 const detectedType = computed(() => {
@@ -221,6 +226,7 @@ const detectedType = computed(() => {
   const u = extracted.toLowerCase()
   if (XHS_ACCOUNT_PATTERNS.some((p) => p.test(u))) return '账号'
   if (XHS_POST_PATTERNS.some((p) => p.test(u))) return '帖子'
+  if (XHS_SHORT_LINK_PATTERNS.some((p) => p.test(u))) return '小红书短链'
   return ''
 })
 
@@ -243,6 +249,15 @@ const validateInput = (): boolean => {
   }
   validationError.value = ''
   return true
+}
+
+const handlePaste = async (event: ClipboardEvent) => {
+  const pasted = event.clipboardData?.getData('text') || ''
+  const extracted = extractXHSUrl(pasted)
+  if (!extracted) return
+  event.preventDefault()
+  url.value = extracted
+  validationError.value = ''
 }
 
 // ── Submit ────────────────────────────────────────────────────────

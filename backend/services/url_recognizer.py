@@ -7,6 +7,46 @@ from typing import Literal
 from schemas.models import InputType
 
 
+def _resolve_xhslink_short_url(url: str) -> str:
+    """Resolve generic xhslink.com share links to canonical XHS URLs.
+
+    小红书分享文案里最常见的是 `xhslink.com/a/xxx` / `xhslink.com/m/xxx`
+    这类短链。它们本身不包含 note/user id，必须先跟随跳转，否则后端只能
+    识别到“这是小红书域名”，但无法判断账号/帖子类型。
+
+    Resolution is best-effort: if the request fails or does not land on a
+    recognizable xiaohongshu.com URL, return the original URL and let the normal
+    recognizer produce a clear validation error.
+    """
+    if "xhslink.com" not in url.lower():
+        return url
+
+    # Already-expanded xhslink URLs used by some tests/legacy links.
+    if re.search(r"xhslink\.com/.*?(explore|profile)/", url, re.I):
+        return url
+
+    try:
+        import httpx
+
+        headers = {
+            "User-Agent": (
+                "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) "
+                "AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 "
+                "Mobile/15E148 Safari/604.1"
+            ),
+            "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
+        }
+        with httpx.Client(timeout=8, follow_redirects=True, headers=headers) as client:
+            resp = client.get(url)
+            final_url = str(resp.url)
+            if "xiaohongshu.com" in final_url.lower() or "xhslink.com" in final_url.lower():
+                return final_url
+    except Exception as exc:
+        print(f"[UrlRecognizer] xhslink resolve failed: {type(exc).__name__}: {exc}")
+
+    return url
+
+
 class UrlRecognizer:
     """
     Pattern priority:
@@ -82,4 +122,4 @@ def validate_url(url: str) -> str:
             "仅支持小红书链接。请提供 xiaohongshu.com 或 xhslink.com 开头的链接。"
         )
 
-    return url
+    return _resolve_xhslink_short_url(url)
