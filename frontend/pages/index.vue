@@ -182,7 +182,27 @@ const url = ref('')
 const loading = ref(false)
 const validationError = ref('')
 
-// ── Client-side URL type detection for instant feedback ──────────
+// ── URL extraction: supports raw share text, short links, long links ──
+
+// Extract first valid XHS URL from any input text (including share文案)
+function extractXHSUrl(input: string): string | null {
+  const text = input.trim()
+  if (!text) return null
+  // Match xhslink.com/... or xiaohongshu.com/... URLs (with possible surrounding text)
+  const match = text.match(/(https?:\/\/[^\s\]'"）】">]*?(?:xhslink\.com|xiaohongshu\.com)[^\s\]'"）】">]*)/i)
+  if (match) {
+    // Trim trailing punctuation/characters that aren't part of URL
+    let extracted = match[1]
+    // Remove trailing Chinese punctuation or quotes
+    extracted = extracted.replace(/[）】]\s*$/, '')
+    // Ensure it starts with http(s)
+    if (!extracted.startsWith('http')) {
+      extracted = 'https://' + extracted
+    }
+    return extracted
+  }
+  return null
+}
 
 const XHS_ACCOUNT_PATTERNS = [
   /xhslink\.com\/[^/]+\/profile\//i,
@@ -194,9 +214,11 @@ const XHS_POST_PATTERNS = [
   /xiaohongshu\.com\/discovery\/item\//i,
 ]
 
+// detectedType operates on the extracted URL (not raw input)
 const detectedType = computed(() => {
-  const u = url.value.trim().toLowerCase()
-  if (!u) return ''
+  const extracted = extractXHSUrl(url.value)
+  if (!extracted) return ''
+  const u = extracted.toLowerCase()
   if (XHS_ACCOUNT_PATTERNS.some((p) => p.test(u))) return '账号'
   if (XHS_POST_PATTERNS.some((p) => p.test(u))) return '帖子'
   return ''
@@ -209,14 +231,14 @@ const showHints = computed(() => {
 // ── Validation ───────────────────────────────────────────────────
 
 const validateInput = (): boolean => {
-  const u = url.value.trim()
-  if (!u) {
+  const raw = url.value.trim()
+  if (!raw) {
     validationError.value = '请输入小红书链接'
     return false
   }
-  const hasXHS = /xiaohongshu|xhslink/i.test(u)
-  if (!hasXHS) {
-    validationError.value = '请输入小红书链接（目前仅支持小红书）'
+  const extracted = extractXHSUrl(raw)
+  if (!extracted) {
+    validationError.value = '链接无法识别，请确保输入包含有效的小红书链接'
     return false
   }
   validationError.value = ''
@@ -230,7 +252,9 @@ const startAnalysis = async () => {
   loading.value = true
   validationError.value = ''
   try {
-    const res = await createTask(url.value.trim())
+    // Always use the extracted URL (supports raw 分享文案, short links, long links)
+    const apiUrl = extractXHSUrl(url.value.trim())!
+    const res = await createTask(apiUrl)
     router.push(`/analyzing/${res.taskId}`)
   } catch (e: any) {
     const detail = e?.data?.detail

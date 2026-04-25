@@ -91,6 +91,7 @@ def get_task_status(task_id: str) -> Optional[TaskStatusResponse]:
         status=task["status"],
         reportId=task["reportId"] if task["status"] == TaskStatus.DONE else None,
         errorMessage=task.get("errorMessage"),
+        errorCode=task.get("errorCode"),
         progress=task["progress"],
     )
 

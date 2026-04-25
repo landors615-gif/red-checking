@@ -62,7 +62,8 @@
           <div v-if="task.status === 'failed'" class="error-box card animate-slideUp">
             <div class="error-icon">!</div>
             <p class="error-title">生成失败</p>
-            <p class="text-accent text-sm">{{ task.errorMessage || '分析过程中出现错误，请重试' }}</p>
+            <p class="text-accent text-sm">{{ friendlyErrorMessage }}</p>
+            <p v-if="task.errorCode" class="text-xs text-muted mt-4">{{ task.errorCode }}</p>
             <button class="btn btn-primary mt-20 w-full" @click="retry">重新分析</button>
             <NuxtLink to="/" class="btn btn-ghost mt-8 w-full">返回首页</NuxtLink>
           </div>
@@ -107,6 +108,15 @@ const taskId = route.params.taskId as string
 const task = ref<any>(null)
 let pollTimer: ReturnType<typeof setTimeout> | null = null
 
+// User-friendly error messages for known error codes
+const ERROR_CODE_MESSAGES: Record<string, string> = {
+  XHS_VIDEO_NOT_SUPPORTED: '该笔记为视频帖，V1 版本仅支持图文笔记',
+  XHS_COOKIE_EXPIRED: '登录态失效，请联系管理员刷新 Cookie',
+  XHS_RATE_LIMITED: '请求过于频繁，请稍后重试',
+  XHS_PARSE_FAILED: '页面结构解析失败，可能内容已删除或需登录',
+  XHS_NETWORK_ERROR: '网络连接异常，请检查网络后重试',
+}
+
 const steps = ['抓取内容', '生成分析', '组织报告']
 const stepMap: Record<string, number> = {
   pending: 0,
@@ -117,6 +127,16 @@ const stepMap: Record<string, number> = {
   failed: -1,
 }
 const currentStep = computed(() => stepMap[task.value?.status] ?? 0)
+
+// Friendly error message derived from errorCode
+const friendlyErrorMessage = computed(() => {
+  if (!task.value) return ''
+  const code = task.value.errorCode
+  if (code && ERROR_CODE_MESSAGES[code]) {
+    return ERROR_CODE_MESSAGES[code]
+  }
+  return task.value.errorMessage || '分析过程中出现错误，请重试'
+})
 
 const poll = async () => {
   try {

@@ -23,6 +23,7 @@ export interface TaskStatusResponse {
   status: TaskStatus
   reportId?: string
   errorMessage?: string
+  errorCode?: string  // XHS_COOKIE_EXPIRED | XHS_RATE_LIMITED | XHS_VIDEO_NOT_SUPPORTED | XHS_PARSE_FAILED | XHS_NETWORK_ERROR
   progress: number // 0-100
 }
 

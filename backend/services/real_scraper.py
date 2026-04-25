@@ -224,10 +224,33 @@ class RealScraper(BaseScraper):
                     # Peek at first note in map to determine type
                     for k, v in {"_": data.get('note', {}).get('noteDetailMap', {})} if False else [None]:
                         pass
-                    # Fallback: if we got HTML but no parsable note, it's likely blocked
+                    # Fallback: if we got HTML but no parsable note, check if it's a video post
+                    # Video posts return empty noteDetailMap but contain type:'video' in raw data
+                    is_video = False
+                    try:
+                        # Scan parsed data for any note with type:video
+                        note_search = data.get('note', {})
+                        all_notes = note_search.get('noteDetailMap', {})
+                        for _nid, ndata in all_notes.items():
+                            if ndata.get('note', {}).get('type') == 'video':
+                                is_video = True
+                                break
+                        # Also check raw HTML for video player signal
+                        if not is_video and ('<video' in html or 'xigua video' in html.lower()
+                                              or 'player.xiaohongshu.com' in html):
+                            is_video = True
+                    except Exception:
+                        pass
+
+                    if is_video:
+                        raise XHSScraperError(
+                            XHSScraperError.CODE_VIDEO_NOT_SUPPORTED,
+                            "检测到视频帖，V1 版本仅支持图文笔记，V2 将支持视频分析",
+                            debug={"http_status": resp.status_code},
+                        )
                     raise XHSScraperError(
-                        XHSScraperError.CODE_CONTENT_BLOCKED,
-                        "无法解析笔记内容，可能为视频帖或已被删除",
+                        XHSScraperError.CODE_PARSE_FAILED,
+                        "未能在页面中解析到笔记数据，可能被删除或页面结构变化",
                         debug={"http_status": resp.status_code, "note_map_keys": list(note_map.keys())},
                     )
                 print(f"[RealScraper] noteDetailMap empty")

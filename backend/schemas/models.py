@@ -33,6 +33,7 @@ class TaskStatusResponse(BaseModel):
     status: TaskStatus
     reportId: Optional[str] = None
     errorMessage: Optional[str] = None
+    errorCode: Optional[str] = None  # XHS_COOKIE_EXPIRED | XHS_RATE_LIMITED | XHS_VIDEO_NOT_SUPPORTED | XHS_PARSE_FAILED | XHS_NETWORK_ERROR
     progress: int = 0  # 0-100
 
 
