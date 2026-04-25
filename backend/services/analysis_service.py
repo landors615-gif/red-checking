@@ -2,18 +2,19 @@
 Analysis Service — generates AI-powered insights from scraped XHS data.
 
 MODES:
+  minimax  — use MiniMax M2.7 (MINIMAX_API_KEY required, ANALYSIS_MODE=minimax)
   mock     — use pre-defined analysis templates (no API key needed)
   anthropic — use Anthropic Claude API (ANTHROPIC_API_KEY required)
   openai   — use OpenAI API (OPENAI_API_KEY required)
   openrouter — use OpenRouter with free models (OPENROUTER_API_KEY required)
 
 To activate:
-  Set ANALYSIS_MODE=anthropic|openai|openrouter in environment
+  Set ANALYSIS_MODE=minimax|anthropic|openai|openrouter in environment
   Or set the corresponding API key env var — mode auto-detected
 
 Real analysis status:
-  FUNCTIONAL when API key is set. Without key, falls back to MOCK.
-  The pipeline is real; only the AI provider is missing.
+  FUNCTIONAL when API key is set. Without key, falls back to MOCK only if ANALYSIS_MODE=mock.
+  Real mode failures propagate as exceptions — no silent mock fallback.
 """
 import os
 import json
@@ -23,6 +24,11 @@ from typing import Optional
 # ── Analysis modes ────────────────────────────────────────────────
 
 def get_analysis_mode() -> str:
+    # Explicit override first
+    mode = os.environ.get('ANALYSIS_MODE', '').lower()
+    if mode in ('minimax', 'anthropic', 'openai', 'openrouter', 'mock'):
+        return mode
+    # Auto-detect by available API keys
     if os.environ.get('MINIMAX_API_KEY'):
         return 'minimax'
     if os.environ.get('ANTHROPIC_API_KEY'):
@@ -107,71 +113,28 @@ class AnalysisService:
     """
     Coordinates AI analysis of scraped XHS data.
 
-    When no API key is set → returns MOCK analysis from mocks/data.py
-    When API key is set → calls real AI and returns structured analysis
-
-    The pipeline (scraping → analysis → report) is fully implemented
-    and wired into task_store. Only the AI provider is missing.
+    When ANALYSIS_MODE=mock → returns MOCK analysis from mocks/data.py
+    When ANALYSIS_MODE=minimax (or MINIMAX_API_KEY set) → calls MiniMax M2.7
+    Real analysis failures propagate as exceptions — no silent mock fallback.
     """
 
     def __init__(self):
         self.mode = get_analysis_mode()
-        self._client = None
-
-    def _get_client(self):
-        if self._client:
-            return self._client
-
-        if self.mode == 'anthropic':
-            import anthropic
-            self._client = anthropic.Anthropic(api_key=os.environ['ANTHROPIC_API_KEY'])
-        elif self.mode == 'minimax':
-            import httpx
-            self._client = httpx.Client(
-                base_url='https://api.minimax.chat/v1',
-                headers={
-                    'Authorization': f"Bearer {os.environ['MINIMAX_API_KEY']}",
-                    'Content-Type': 'application/json',
-                },
-                timeout=120,
-            )
-        elif self.mode in ('openai', 'openrouter'):
-            import httpx
-            self._client = httpx.Client(
-                base_url='https://openrouter.ai/api/v1' if self.mode == 'openrouter'
-                          else 'https://api.openai.com/v1',
-                headers={
-                    'Authorization': f"Bearer {os.environ.get('OPENROUTER_API_KEY') or os.environ.get('OPENAI_API_KEY')}",
-                    'Content-Type': 'application/json',
-                },
-                timeout=30,
-            )
-        return self._client
 
     async def analyze_account(self, account_data: dict) -> dict:
-        """
-        Generate real AI analysis for an account.
-        Falls back to mock if no API key is configured.
-        """
+        """Generate AI analysis for an account. Failures propagate up."""
         if self.mode == 'mock':
             from mocks.data import MOCK_ACCOUNT_REPORT
             await asyncio.sleep(0.1)
             return MOCK_ACCOUNT_REPORT['analysis']
 
-        # Real AI analysis
         data_str = json.dumps(account_data, ensure_ascii=False, indent=2)
         prompt = ACCOUNT_ANALYSIS_PROMPT.format(note_data=data_str)
-
-        try:
-            analysis = await self._call_ai(prompt)
-            return json.loads(analysis)
-        except Exception as e:
-            print(f"[AnalysisService] AI analysis failed: {e}, falling back to mock")
-            from mocks.data import MOCK_ACCOUNT_REPORT
-            return MOCK_ACCOUNT_REPORT['analysis']
+        analysis = await self._call_ai(prompt)
+        return json.loads(analysis)
 
     async def analyze_post(self, post_data: dict) -> dict:
-        """Generate real AI analysis for a post."""
+        """Generate AI analysis for a post. Failures propagate up."""
         if self.mode == 'mock':
             from mocks.data import MOCK_POST_REPORT
             await asyncio.sleep(0.1)
@@ -179,19 +142,19 @@ class AnalysisService:
 
         data_str = json.dumps(post_data, ensure_ascii=False, indent=2)
         prompt = POST_ANALYSIS_PROMPT.format(note_data=data_str)
-
-        try:
-            analysis = await self._call_ai(prompt)
-            return json.loads(analysis)
-        except Exception as e:
-            print(f"[AnalysisService] AI analysis failed: {e}, falling back to mock")
-            from mocks.data import MOCK_POST_REPORT
-            return MOCK_POST_REPORT['analysis']
+        analysis = await self._call_ai(prompt)
+        return json.loads(analysis)
 
     async def _call_ai(self, prompt: str) -> str:
-        """Call the configured AI provider."""
-        if self.mode == 'anthropic':
-            client = self._get_client()
+        """Dispatch to the configured AI provider."""
+        mode = self.mode
+
+        if mode == 'minimax':
+            return await self._call_minimax(prompt)
+
+        if mode == 'anthropic':
+            import anthropic
+            client = anthropic.Anthropic(api_key=os.environ['ANTHROPIC_API_KEY'])
             resp = client.messages.create(
                 model='claude-3-5-haiku-20241022',
                 max_tokens=2048,
@@ -199,43 +162,86 @@ class AnalysisService:
             )
             return resp.content[0].text
 
-        elif self.mode == 'minimax':
-            client = self._get_client()
-            resp = client.post('/text/chatcompletion_v2', json={
-                'model': 'MiniMax-M2.7',
-                'messages': [{'role': 'user', 'content': prompt}],
-                'max_tokens': 8192,
-            })
-            data = resp.json()
-            base_resp = data.get('base_resp', {})
-            if base_resp.get('status_code', 0) != 0:
-                raise ValueError(f"MiniMax API error: {base_resp.get('status_msg')}")
-            msg = data['choices'][0]['message']
-            # MiniMax M2.7 may put content in reasoning_content instead of content
-            text = msg.get('content') or msg.get('reasoning_content') or ''
-            return text
+        if mode == 'openai':
+            import httpx
+            with httpx.Client(
+                base_url='https://api.openai.com/v1',
+                headers={'Authorization': f"Bearer {os.environ['OPENAI_API_KEY']}"},
+                timeout=30,
+            ) as client:
+                resp = client.post('/chat/completions', json={
+                    'model': 'gpt-4o-mini',
+                    'messages': [{'role': 'user', 'content': prompt}],
+                    'max_tokens': 2048,
+                })
+                data = resp.json()
+                return data['choices'][0]['message']['content']
 
-        elif self.mode == 'openai':
-            client = self._get_client()
-            resp = client.post('/chat/completions', json={
-                'model': 'gpt-4o-mini',
-                'messages': [{'role': 'user', 'content': prompt}],
-                'max_tokens': 2048,
-            })
-            data = resp.json()
-            return data['choices'][0]['message']['content']
+        if mode == 'openrouter':
+            import httpx
+            with httpx.Client(
+                base_url='https://openrouter.ai/api/v1',
+                headers={'Authorization': f"Bearer {os.environ['OPENROUTER_API_KEY']}"},
+                timeout=30,
+            ) as client:
+                resp = client.post('/chat/completions', json={
+                    'model': 'google/gemini-2.0-flash-thinking-exp-01-21',
+                    'messages': [{'role': 'user', 'content': prompt}],
+                    'max_tokens': 2048,
+                })
+                data = resp.json()
+                return data['choices'][0]['message']['content']
 
-        elif self.mode == 'openrouter':
-            client = self._get_client()
-            resp = client.post('/chat/completions', json={
-                'model': 'google/gemini-2.0-flash-thinking-exp-01-21',
-                'messages': [{'role': 'user', 'content': prompt}],
-                'max_tokens': 2048,
-            })
-            data = resp.json()
-            return data['choices'][0]['message']['content']
+        if mode == 'mock':
+            # Should not reach here (analyze_* handle mock directly), but just in case
+            raise RuntimeError("MOCK mode should be handled before _call_ai")
 
-        raise ValueError(f"Unknown mode: {self.mode}")
+        raise ValueError(f"Unknown ANALYSIS_MODE: {mode}")
+
+    # ── MiniMax M2.7 ─────────────────────────────────────────────
+
+    async def _call_minimax(self, prompt: str) -> str:
+        """Call MiniMax M2.7 via httpx.AsyncClient (pure async, no sync fallback)."""
+        import httpx
+
+        api_key = os.environ["MINIMAX_API_KEY"]
+        payload = {
+            "model": "MiniMax-M2.7",
+            "messages": [
+                {"role": "system", "content": "你是一个专业的小红书内容分析师。"},
+                {"role": "user", "content": prompt},
+            ],
+            "max_tokens": 8192,
+            "temperature": 0.3,
+            "stream": False,
+        }
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+        }
+        timeout = httpx.Timeout(connect=10.0, read=180.0, write=30.0, pool=10.0)
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            resp = await client.post(
+                "https://api.minimaxi.com/v1/text/chatcompletion_v2",
+                headers=headers,
+                json=payload,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+        return self._extract_minimax_text(data)
+
+    @staticmethod
+    def _extract_minimax_text(data: dict) -> str:
+        """Extract text from MiniMax response, supporting reasoning_content."""
+        try:
+            msg = data["choices"][0]["message"]
+        except (KeyError, IndexError, TypeError):
+            raise RuntimeError(f"MINIMAX_BAD_RESPONSE: {str(data)[:500]}")
+        for key in ("content", "reasoning_content"):
+            val = msg.get(key)
+            if isinstance(val, str) and val.strip():
+                return val.strip()
+        raise RuntimeError(f"MINIMAX_EMPTY_RESPONSE: {str(data)[:500]}")
 
 
 # Singleton
